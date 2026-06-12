@@ -4,6 +4,11 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Inside the Mitochondrion — An Interactive 3D Guide</title>
+<script>
+  window.__errs=[];
+  window.addEventListener('error', e=>{ window.__errs.push(String(e.message)+' @ '+(e.filename||'')+':'+(e.lineno||'')); });
+  window.addEventListener('unhandledrejection', e=>{ window.__errs.push('promise: '+String(e.reason)); });
+</script>
 <style>
   :root{
     --bg1:#f4f8ff;
@@ -806,17 +811,33 @@ addEventListener('resize',()=>{
   resizeTimer=setTimeout(()=>applyLevel(state.level,true),200); // re-fit framing
 });
 
-applyLevel(0,false);
-animate();
+function hideLoader(){
+  const l=document.getElementById('load');
+  if(!l) return;
+  l.style.opacity='0';
+  setTimeout(()=>l.remove(),650);
+}
+function showFatal(err){
+  const msg = String(err && (err.stack||err.message) || err);
+  if(window.__errs) window.__errs.push(msg);
+  const l=document.getElementById('load');
+  if(l){
+    l.innerHTML='<div style="max-width:560px;padding:24px;text-align:center;font:14px/1.6 -apple-system,system-ui,sans-serif;color:#922">'
+      +'<b style="font-size:16px">The 3D view could not start.</b><br><br>'
+      +'Try a hard refresh. If it persists, this message has the details:<br><br>'
+      +'<code style="display:block;font-size:11px;color:#444;background:#fff;border:1px solid #eee;border-radius:8px;padding:12px;text-align:left;white-space:pre-wrap;overflow:auto;max-height:240px">'
+      + msg.replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c])) +'</code></div>';
+  }
+}
 
-// hide loader once first frame is up
-requestAnimationFrame(()=>{
-  setTimeout(()=>{
-    const l=document.getElementById('load');
-    l.style.opacity='0';
-    setTimeout(()=>l.remove(),650);
-  },300);
-});
+try{
+  applyLevel(0,false);
+  renderer.render(scene,camera);   // probe render: proves WebGL works (and surfaces errors now)
+  hideLoader();                    // hide immediately — never gate the loader on requestAnimationFrame
+  animate();                       // start the loop; the pending frame resumes naturally once visible
+}catch(err){
+  showFatal(err);
+}
 </script>
 </body>
 </html>
