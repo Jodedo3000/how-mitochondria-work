@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inside the Mitochondrion — An Interactive 3D Guide</title>
+<style>
+  :root{
+    --bg1:#f4f8ff;
+    --bg2:#e7f0fb;
+    --ink:#1d2733;
+    --ink-soft:#566173;
+    --accent:#2f6df0;
+    --accent-2:#16a085;
+    --card:#ffffffee;
+    --line:#d8e2f0;
+    --shadow:0 10px 30px rgba(40,70,120,.12);
+    --proton:#f4b400;
+    --electron:#3a7bff;
+    --atp:#2bb673;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);}
+  body{overflow:hidden;background:linear-gradient(160deg,var(--bg1),var(--bg2));}
+  #app{position:fixed;inset:0;}
+  canvas{display:block;}
+
+  /* ---- Header ---- */
+  header{
+    position:fixed;top:0;left:0;right:0;z-index:30;
+    display:flex;align-items:center;gap:14px;
+    padding:14px 22px;pointer-events:none;
+  }
+  header .title{
+    font-weight:700;font-size:18px;letter-spacing:.2px;
+    background:var(--card);padding:8px 16px;border-radius:999px;
+    box-shadow:var(--shadow);pointer-events:auto;border:1px solid var(--line);
+  }
+  header .title span{color:var(--accent);}
+  header .hint{
+    font-size:12.5px;color:var(--ink-soft);background:var(--card);
+    padding:7px 13px;border-radius:999px;box-shadow:var(--shadow);
+    border:1px solid var(--line);pointer-events:auto;
+  }
+
+  /* ---- Level rail (left) ---- */
+  #rail{
+    position:fixed;left:22px;top:50%;transform:translateY(-50%);
+    z-index:30;display:flex;flex-direction:column;gap:10px;width:62px;
+  }
+  .leveldot{
+    position:relative;cursor:pointer;border:none;background:var(--card);
+    border:1px solid var(--line);border-radius:14px;padding:10px 0;
+    box-shadow:var(--shadow);transition:.2s;display:flex;flex-direction:column;
+    align-items:center;gap:3px;color:var(--ink-soft);
+  }
+  .leveldot b{font-size:16px;color:var(--ink);}
+  .leveldot small{font-size:9px;text-transform:uppercase;letter-spacing:.4px;}
+  .leveldot:hover{transform:translateX(4px);}
+  .leveldot.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .leveldot.active b,.leveldot.active small{color:#fff;}
+
+  /* ---- Info panel (bottom / right) ---- */
+  #panel{
+    position:fixed;z-index:30;right:22px;bottom:22px;
+    width:360px;max-width:calc(100vw - 44px);
+    background:var(--card);border:1px solid var(--line);
+    border-radius:18px;box-shadow:var(--shadow);
+    padding:18px 20px;backdrop-filter:blur(8px);
+  }
+  #panel .eyebrow{
+    font-size:11px;text-transform:uppercase;letter-spacing:1.2px;
+    color:var(--accent);font-weight:700;margin-bottom:4px;
+  }
+  #panel h2{margin:0 0 8px;font-size:20px;line-height:1.15;}
+  #panel p{margin:0 0 10px;font-size:13.5px;line-height:1.55;color:var(--ink-soft);}
+  #panel .key{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:6px;}
+  #panel .key span{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink);}
+  #panel .key i{width:11px;height:11px;border-radius:50%;display:inline-block;}
+  .pgwrap{display:flex;justify-content:space-between;align-items:center;margin-top:14px;}
+  .navbtns{display:flex;gap:8px;}
+  .navbtns button{
+    border:1px solid var(--line);background:#fff;border-radius:10px;
+    padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink);
+    transition:.15s;
+  }
+  .navbtns button:hover{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .navbtns button:disabled{opacity:.4;cursor:not-allowed;}
+  .navbtns button:disabled:hover{background:#fff;color:var(--ink);border-color:var(--line);}
+  .progress{display:flex;gap:5px;}
+  .progress i{width:22px;height:4px;border-radius:3px;background:var(--line);transition:.3s;}
+  .progress i.on{background:var(--accent);}
+
+  /* ---- toggles (top-right under header) ---- */
+  #tools{position:fixed;right:22px;top:16px;z-index:30;display:flex;gap:8px;}
+  #tools button{
+    border:1px solid var(--line);background:var(--card);border-radius:10px;
+    padding:8px 12px;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--ink);
+    box-shadow:var(--shadow);transition:.15s;display:flex;align-items:center;gap:6px;
+  }
+  #tools button:hover{background:#fff;}
+  #tools button.off{opacity:.55;}
+
+  /* ---- floating 3D labels ---- */
+  #labels{position:fixed;inset:0;z-index:20;pointer-events:none;}
+  .lbl{
+    position:absolute;transform:translate(-50%,-50%);
+    font-size:12px;font-weight:600;color:var(--ink);
+    background:#ffffffe8;border:1px solid var(--line);
+    padding:4px 9px;border-radius:8px;white-space:nowrap;
+    box-shadow:0 4px 14px rgba(40,70,120,.14);
+    transition:opacity .35s;
+  }
+  .lbl::after{
+    content:"";position:absolute;left:-6px;top:50%;transform:translateY(-50%);
+    width:6px;height:6px;border-radius:50%;background:var(--accent);
+    box-shadow:-3px 0 0 -1px var(--accent);
+  }
+  .lbl.sub{font-weight:500;color:var(--ink-soft);font-size:11px;}
+
+  /* loading */
+  #load{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(160deg,var(--bg1),var(--bg2));transition:opacity .6s;}
+  #load .spin{width:42px;height:42px;border:4px solid var(--line);border-top-color:var(--accent);
+    border-radius:50%;animation:sp 1s linear infinite;}
+  @keyframes sp{to{transform:rotate(360deg);}}
+
+  @media (max-width:720px){
+    #panel{right:12px;left:12px;bottom:12px;width:auto;}
+    #rail{left:10px;width:54px;}
+    header{padding:10px 12px;flex-wrap:wrap;}
+    header .hint{display:none;}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="labels"></div>
+
+<header>
+  <div class="title">🔬 Inside the <span>Mitochondrion</span></div>
+  <div class="hint">Drag to rotate · Scroll to zoom · Right-drag to pan</div>
+</header>
+
+<div id="tools">
+  <button id="toggleAnim">⏸ Pause motion</button>
+  <button id="resetView">⟲ Reset view</button>
+</div>
+
+<div id="rail"></div>
+
+<div id="panel">
+  <div class="eyebrow" id="eyebrow">Level 1 of 5</div>
+  <h2 id="title">The cell's power plant</h2>
+  <p id="body">Loading…</p>
+  <div class="key" id="legend"></div>
+  <div class="pgwrap">
+    <div class="progress" id="progress"></div>
+    <div class="navbtns">
+      <button id="prev">← Back</button>
+      <button id="next">Next →</button>
+    </div>
+  </div>
+</div>
+
+<div id="load"><div class="spin"></div></div>
+
+<script type="importmap">
+{
+  "imports":{
+    "three":"https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ======================================================================
+   SCENE SETUP
+   ====================================================================== */
+const appEl = document.getElementById('app');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xeaf2fc);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 1000);
+camera.position.set(0, 3, 16);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+appEl.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 2.5;
+controls.maxDistance = 60;
+
+// Lighting — bright, airy, no dark mode
+scene.add(new THREE.HemisphereLight(0xffffff, 0xb9cce6, 1.05));
+const key = new THREE.DirectionalLight(0xffffff, 1.5);
+key.position.set(6, 10, 8);
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xcfe0ff, 0.6);
+fill.position.set(-8, -4, -6);
+scene.add(fill);
+
+/* ======================================================================
+   HELPERS
+   ====================================================================== */
+const TAU = Math.PI * 2;
+function lerp(a,b,t){ return a + (b-a)*t; }
+function easeInOut(t){ return t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2; }
+
+// Organic blob via lightly-noised icosphere, scaled to a lozenge
+function makeBlobGeometry(radius, detail, jitter, scaleX, scaleY){
+  const g = new THREE.IcosahedronGeometry(radius, detail);
+  const pos = g.attributes.position;
+  const v = new THREE.Vector3();
+  for(let i=0;i<pos.count;i++){
+    v.fromBufferAttribute(pos,i);
+    const n = Math.sin(v.x*2.1)*Math.cos(v.y*1.7)*Math.sin(v.z*2.3);
+    const f = 1 + n*jitter;
+    v.multiplyScalar(f);
+    v.x *= scaleX; v.y *= scaleY;
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+/* ======================================================================
+   GROUP A — WHOLE ORGANELLE (levels 1–3)
+   ====================================================================== */
+const organelle = new THREE.Group();
+scene.add(organelle);
+
+// Outer membrane — smooth lozenge, see-through so the interior reads
+const outerMat = new THREE.MeshStandardMaterial({
+  color:0xff8aa0, roughness:0.3, metalness:0.0,
+  transparent:true, opacity:0.34, side:THREE.DoubleSide, depthWrite:false,
+});
+const outerMembrane = new THREE.Mesh(makeBlobGeometry(4.6, 5, 0.05, 1.55, 1.0), outerMat);
+organelle.add(outerMembrane);
+
+// Inner membrane (slightly smaller, sits just inside)
+const innerMat = new THREE.MeshStandardMaterial({
+  color:0xf25f7c, roughness:0.4, transparent:true, opacity:0.4, side:THREE.DoubleSide, depthWrite:false,
+});
+const innerMembrane = new THREE.Mesh(makeBlobGeometry(3.95, 4, 0.05, 1.5, 0.95), innerMat);
+organelle.add(innerMembrane);
+
+// Matrix gel (the fluid the cristae sit in)
+const matrixMat = new THREE.MeshStandardMaterial({
+  color:0xffd9c2, roughness:0.7, transparent:true, opacity:0.45, depthWrite:false,
+});
+const matrix = new THREE.Mesh(makeBlobGeometry(3.55, 3, 0.04, 1.48, 0.92), matrixMat);
+organelle.add(matrix);
+
+// Cristae — the inner membrane folds, modelled as corrugated discs
+// stacked along the long axis. Corrugation is what makes them read as folds.
+const cristaeGroup = new THREE.Group();
+organelle.add(cristaeGroup);
+const cristaMat = new THREE.MeshStandardMaterial({
+  color:0xee5f7e, roughness:0.4, metalness:0.05, side:THREE.DoubleSide,
+  transparent:true, opacity:0.96,
+});
+// A crista = a thin, gently waved plate (flattened ellipsoid). Clean sphere
+// topology means no corner artifacts; the bend makes it read as a fold.
+function makeCrista(localR, amp, freq, phase){
+  const g = new THREE.SphereGeometry(localR, 28, 18);
+  const pos = g.attributes.position;
+  const v = new THREE.Vector3();
+  for(let i=0;i<pos.count;i++){
+    v.fromBufferAttribute(pos,i);
+    v.x *= 0.16;                       // flatten into a plate facing along x
+    v.x += amp*Math.sin(v.y*freq+phase) + amp*0.5*Math.cos(v.z*freq*0.8+phase); // wavy fold
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals();
+  const m = new THREE.Mesh(g, cristaMat);
+  m.scale.z = 0.82;                    // a touch flatter front-to-back
+  return m;
+}
+const Lx=5.6, Rcross=3.2;
+[-4.7,-3.4,-2.1,-0.8,0.5,1.8,3.1,4.3].forEach((x,i)=>{
+  const localR = Rcross*Math.sqrt(Math.max(0,1-(x/Lx)*(x/Lx)));
+  if(localR<0.9) return;
+  const m = makeCrista(localR*0.96, 0.42, 1.7, i*0.9);
+  m.position.x = x;
+  cristaeGroup.add(m);
+});
+
+// mtDNA loop + ribosomes inside matrix (detail for level 3)
+const innardsGroup = new THREE.Group();
+organelle.add(innardsGroup);
+const dnaCurve = new THREE.Mesh(
+  new THREE.TorusKnotGeometry(0.7, 0.06, 80, 8, 2, 3),
+  new THREE.MeshStandardMaterial({color:0x7c4dff, roughness:0.5})
+);
+dnaCurve.position.set(-2.4, 0.3, 0.6);
+dnaCurve.scale.setScalar(0.9);
+innardsGroup.add(dnaCurve);
+const riboMat = new THREE.MeshStandardMaterial({color:0x8e6bd0, roughness:0.6});
+for(let i=0;i<14;i++){
+  const r = new THREE.Mesh(new THREE.SphereGeometry(0.12,10,10), riboMat);
+  r.position.set((Math.sin(i*1.7))*4.5, (Math.cos(i*2.3))*1.4, (Math.sin(i*3.1))*1.4);
+  innardsGroup.add(r);
+}
+
+/* ======================================================================
+   GROUP B — MEMBRANE CLOSE-UP (levels 4–5)
+   A flat slice of cristae membrane with the electron transport chain.
+   Top = intermembrane space (protons accumulate). Bottom = matrix.
+   ====================================================================== */
+const closeup = new THREE.Group();
+closeup.visible = false;
+scene.add(closeup);
+
+const BILAYER_Y = 0;
+const BILAYER_H = 1.4;           // membrane thickness
+const topY = BILAYER_Y + BILAYER_H/2;
+const botY = BILAYER_Y - BILAYER_H/2;
+
+// translucent lipid slab
+const slab = new THREE.Mesh(
+  new THREE.BoxGeometry(22, BILAYER_H, 6),
+  new THREE.MeshStandardMaterial({color:0xffe1b0, roughness:0.7, transparent:true, opacity:0.28})
+);
+closeup.add(slab);
+
+// phospholipid heads (two rows) + tails, stylised
+const headMat = new THREE.MeshStandardMaterial({color:0xffb74d, roughness:0.5});
+const tailMat = new THREE.MeshStandardMaterial({color:0xffcc80, roughness:0.6, transparent:true, opacity:0.7});
+function phospholipidRow(y, dir){
+  const g = new THREE.Group();
+  for(let x=-10.5; x<=10.5; x+=0.7){
+    for(let z=-2.4; z<=2.4; z+=1.2){
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.16,10,10), headMat);
+      head.position.set(x, y, z);
+      g.add(head);
+      const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,0.5,6), tailMat);
+      tail.position.set(x, y - dir*0.33, z);
+      g.add(tail);
+    }
+  }
+  return g;
+}
+closeup.add(phospholipidRow(topY-0.05, 1));
+closeup.add(phospholipidRow(botY+0.05, -1));
+
+// labels for the two compartments handled via DOM labels below
+
+// ---- Electron-transport-chain complexes ----
+const complexDefs = [
+  {key:'I',   x:-8.0, color:0x2f6df0, w:2.0, name:'Complex I'},
+  {key:'II',  x:-4.6, color:0x9c27b0, w:1.4, name:'Complex II', short:true},
+  {key:'III', x:-1.2, color:0x00897b, w:1.9, name:'Complex III'},
+  {key:'IV',  x: 2.6, color:0xe53935, w:1.9, name:'Complex IV'},
+];
+const complexes = {};
+complexDefs.forEach(d=>{
+  const grp = new THREE.Group();
+  grp.position.x = d.x;
+  const h = d.short ? BILAYER_H : BILAYER_H + 1.1; // most poke into intermembrane space
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(d.w*0.5, d.w*0.62, h, 18, 1),
+    new THREE.MeshStandardMaterial({color:d.color, roughness:0.4, metalness:0.1})
+  );
+  body.position.y = d.short ? 0 : 0.55;
+  body.scale.z = 0.7;
+  grp.add(body);
+  // a little dome on top
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(d.w*0.5, 16, 12, 0, TAU, 0, Math.PI/2),
+    new THREE.MeshStandardMaterial({color:d.color, roughness:0.4})
+  );
+  dome.position.y = body.position.y + h/2;
+  dome.scale.set(1,0.6,0.7);
+  grp.add(dome);
+  closeup.add(grp);
+  complexes[d.key] = grp;
+});
+
+// ---- ATP synthase: stalk through membrane + spinning F1 head in matrix ----
+const atpSynthase = new THREE.Group();
+atpSynthase.position.x = 7.4;
+closeup.add(atpSynthase);
+// Fo channel in membrane
+const foChannel = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.55,0.7,BILAYER_H+0.3,18),
+  new THREE.MeshStandardMaterial({color:0x455a64, roughness:0.5})
+);
+foChannel.scale.z = 0.75;
+atpSynthase.add(foChannel);
+// rotor stalk reaching down into the matrix
+const rotor = new THREE.Group();
+rotor.position.y = botY - 0.1;
+atpSynthase.add(rotor);
+const stalk = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.18,0.18,1.0,12),
+  new THREE.MeshStandardMaterial({color:0x90a4ae, roughness:0.5})
+);
+stalk.position.y = -0.5;
+rotor.add(stalk);
+// F1 head (the catalytic knob) — three pairs of subunits
+const f1 = new THREE.Group();
+f1.position.y = -1.2;
+rotor.add(f1);
+for(let i=0;i<6;i++){
+  const lobe = new THREE.Mesh(
+    new THREE.SphereGeometry(0.42,14,14),
+    new THREE.MeshStandardMaterial({color:i%2?0xff7043:0xffa726, roughness:0.4})
+  );
+  const a = (i/6)*TAU;
+  lobe.position.set(Math.cos(a)*0.5, -0.1*(i%2), Math.sin(a)*0.5);
+  f1.add(lobe);
+}
+// stator arm (the part that stays still)
+const stator = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.1,0.1,1.6,8),
+  new THREE.MeshStandardMaterial({color:0x607d8b, roughness:0.5})
+);
+stator.position.set(0.75, botY-0.9, 0);
+atpSynthase.add(stator);
+
+/* ======================================================================
+   ANIMATED PARTICLES (protons, electrons, ATP) for the close-up
+   ====================================================================== */
+const protonMat = new THREE.MeshStandardMaterial({color:0xf4b400, emissive:0x6b4d00, emissiveIntensity:0.35, roughness:0.3});
+const electronMat = new THREE.MeshStandardMaterial({color:0x3a7bff, emissive:0x102a66, emissiveIntensity:0.5, roughness:0.2});
+const atpMat = new THREE.MeshStandardMaterial({color:0x2bb673, emissive:0x0c4a2c, emissiveIntensity:0.4, roughness:0.3});
+
+const particleGroup = new THREE.Group();
+closeup.add(particleGroup);
+
+// protons being pumped up at complexes I, III, IV, drifting in intermembrane space,
+// then funnelled down through ATP synthase.
+const protons = [];
+function spawnProton(i){
+  const m = new THREE.Mesh(new THREE.SphereGeometry(0.14,10,10), protonMat);
+  particleGroup.add(m);
+  return { mesh:m, t:Math.random(), pumpAt:[-8.0,-1.2,2.6][i%3], speed:0.06+Math.random()*0.04 };
+}
+for(let i=0;i<22;i++) protons.push(spawnProton(i));
+
+// electrons hopping along the chain I -> II -> III -> IV
+const electrons = [];
+const chainX = [-8.0,-4.6,-1.2,2.6];
+for(let i=0;i<6;i++){
+  const m = new THREE.Mesh(new THREE.SphereGeometry(0.1,10,10), electronMat);
+  particleGroup.add(m);
+  electrons.push({mesh:m, t:Math.random(), speed:0.05+Math.random()*0.03});
+}
+
+// mobile carriers Q (ubiquinone) and cyt c
+const qCarrier = new THREE.Mesh(new THREE.SphereGeometry(0.2,12,12),
+  new THREE.MeshStandardMaterial({color:0x5d4037, roughness:0.5}));
+const cytC = new THREE.Mesh(new THREE.SphereGeometry(0.18,12,12),
+  new THREE.MeshStandardMaterial({color:0xc62828, roughness:0.5}));
+particleGroup.add(qCarrier, cytC);
+
+// ATP products rising out of the synthase
+const atps = [];
+for(let i=0;i<8;i++){
+  const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.18,0), atpMat);
+  particleGroup.add(m);
+  atps.push({mesh:m, t:Math.random()});
+}
+
+/* ======================================================================
+   FLOATING DOM LABELS
+   ====================================================================== */
+const labelLayer = document.getElementById('labels');
+function makeLabel(text, sub=false){
+  const el = document.createElement('div');
+  el.className = 'lbl' + (sub?' sub':'');
+  el.textContent = text;
+  el.style.opacity = '0';
+  labelLayer.appendChild(el);
+  return el;
+}
+// label registry: {el, pos:Vector3, levels:[...] }
+const labels = [
+  // organelle
+  {el:makeLabel('Outer membrane'),       pos:new THREE.Vector3(0,5.1,0),     levels:[2,3]},
+  {el:makeLabel('Inner membrane'),       pos:new THREE.Vector3(5.6,2.4,0),   levels:[2,3]},
+  {el:makeLabel('Intermembrane space',true), pos:new THREE.Vector3(-6.4,2.6,0), levels:[2,3]},
+  {el:makeLabel('Matrix'),               pos:new THREE.Vector3(1.6,-2.6,1),  levels:[2,3]},
+  {el:makeLabel('Cristae (folds)'),      pos:new THREE.Vector3(-2.2,3.0,0.5),levels:[2,3]},
+  {el:makeLabel('Mitochondrial DNA',true),pos:new THREE.Vector3(-2.4,1.6,0.6),levels:[3]},
+  {el:makeLabel('Ribosomes',true),       pos:new THREE.Vector3(3.4,1.4,0.8), levels:[3]},
+  // close-up
+  {el:makeLabel('Intermembrane space  (H⁺ piles up)',true), pos:new THREE.Vector3(0,2.7,0), levels:[4,5]},
+  {el:makeLabel('Matrix side',true),     pos:new THREE.Vector3(-9,-2.4,0),   levels:[4,5]},
+  {el:makeLabel('Complex I'),            pos:new THREE.Vector3(-8.0,2.2,0),  levels:[4]},
+  {el:makeLabel('Complex II',true),      pos:new THREE.Vector3(-4.6,1.1,0),  levels:[4]},
+  {el:makeLabel('Complex III'),          pos:new THREE.Vector3(-1.2,2.2,0),  levels:[4]},
+  {el:makeLabel('Complex IV'),           pos:new THREE.Vector3(2.6,2.2,0),   levels:[4]},
+  {el:makeLabel('ATP synthase'),         pos:new THREE.Vector3(7.4,2.0,0),   levels:[4,5]},
+  {el:makeLabel('H⁺ flows back down → spins the rotor',true), pos:new THREE.Vector3(7.4,-0.2,0), levels:[5]},
+  {el:makeLabel('ADP + Pᵢ  →  ATP',true),pos:new THREE.Vector3(7.4,-2.9,0),  levels:[5]},
+  {el:makeLabel('Electrons hop along the chain →',true), pos:new THREE.Vector3(-3.0,-0.2,1.6), levels:[4]},
+];
+const tmpV = new THREE.Vector3();
+function updateLabels(){
+  labels.forEach(L=>{
+    const visible = L.levels.includes(state.level+1);  // labels use 1-based level numbers
+    tmpV.copy(L.pos).project(camera);
+    const onScreen = tmpV.z < 1 && tmpV.x>-1.1 && tmpV.x<1.1 && tmpV.y>-1.1 && tmpV.y<1.1;
+    if(visible && onScreen){
+      L.el.style.opacity = '1';
+      L.el.style.left = (tmpV.x*0.5+0.5)*innerWidth + 'px';
+      L.el.style.top  = (-tmpV.y*0.5+0.5)*innerHeight + 'px';
+    } else {
+      L.el.style.opacity = '0';
+    }
+  });
+}
+
+/* ======================================================================
+   LEVEL DEFINITIONS  (content + camera + what's shown)
+   ====================================================================== */
+const LEVELS = [
+  {
+    name:'Overview',
+    eyebrow:'Level 1 of 5 · Overview',
+    title:'The cell’s power plant',
+    body:'Almost every cell in your body runs tiny power plants called <b>mitochondria</b>. They take the food you eat and the oxygen you breathe and convert them into <b>ATP</b>, the molecule cells spend like cash for every job they do. A single hard-working cell can hold thousands of them. Spin the model to get a feel for the shape, then go deeper.',
+    legend:[],
+    cam:{pos:new THREE.Vector3(0,3.5,20), target:new THREE.Vector3(0,0,0)},
+    show:'organelle',
+  },
+  {
+    name:'Anatomy',
+    eyebrow:'Level 2 of 5 · Anatomy',
+    title:'A bag inside a bag',
+    body:'A mitochondrion has <b>two membranes</b>. The smooth <b>outer membrane</b> is the outer wall. The <b>inner membrane</b> folds into deep ridges called <b>cristae</b>, which pack in enormous surface area, that is where the real work happens. The space the cristae enclose is the <b>matrix</b>; the thin gap between the two membranes is the <b>intermembrane space</b>.',
+    legend:[
+      {c:'#ff8aa0',t:'Outer membrane'},
+      {c:'#f25f7c',t:'Inner membrane / cristae'},
+      {c:'#ffd9c2',t:'Matrix'},
+    ],
+    cam:{pos:new THREE.Vector3(2,4,14), target:new THREE.Vector3(0,0,0)},
+    show:'organelle',
+  },
+  {
+    name:'The plan',
+    eyebrow:'Level 3 of 5 · The plan',
+    title:'Burning fuel without a flame',
+    body:'Food is broken into a fuel that delivers <b>high-energy electrons</b> to the inner membrane. Instead of releasing that energy as one violent burst of heat, the mitochondrion lets the electrons down a staircase, harvesting the energy in small, safe steps. Notice the matrix also holds its own <b>DNA</b> and <b>ribosomes</b>, a clue that mitochondria were once free-living bacteria swallowed by our ancestors.',
+    legend:[
+      {c:'#7c4dff',t:'Mitochondrial DNA'},
+      {c:'#8e6bd0',t:'Ribosomes'},
+    ],
+    cam:{pos:new THREE.Vector3(-3,2.5,12), target:new THREE.Vector3(-1,0,0)},
+    show:'organelle',
+  },
+  {
+    name:'Molecular',
+    eyebrow:'Level 4 of 5 · Molecular machinery',
+    title:'The electron transport chain',
+    body:'Zoom into one fold of the inner membrane. Four protein machines, <b>Complexes I to IV</b>, pass electrons (blue) from one to the next. Each downhill step releases energy used to <b>pump protons (H⁺, yellow)</b> from the matrix up into the intermembrane space. <b>Oxygen</b> waits at Complex IV to catch the spent electrons, becoming water. The protons now crowd on one side, a charged battery.',
+    legend:[
+      {c:'#3a7bff',t:'Electrons'},
+      {c:'#f4b400',t:'Protons (H⁺)'},
+      {c:'#e53935',t:'O₂ → H₂O at Complex IV'},
+    ],
+    cam:{pos:new THREE.Vector3(-0.5,2.2,17.5), target:new THREE.Vector3(-1,-0.3,0)},
+    show:'closeup',
+  },
+  {
+    name:'Atomic',
+    eyebrow:'Level 5 of 5 · The molecular motor',
+    title:'ATP synthase: a turbine for protons',
+    body:'The proton battery now discharges. H⁺ ions stream back down through <b>ATP synthase</b>, and like water through a hydro turbine, the flow physically <b>spins a rotor</b>. Each turn snaps <b>ADP + phosphate (Pᵢ) together into ATP</b>. This is <i>chemiosmosis</i>: a flow of charge converted into a chemical bond. One glucose can yield roughly 30 ATP this way, the energy currency that powers everything you do.',
+    legend:[
+      {c:'#f4b400',t:'H⁺ driving the rotor'},
+      {c:'#2bb673',t:'ATP produced'},
+    ],
+    cam:{pos:new THREE.Vector3(6.6,0.4,9), target:new THREE.Vector3(7.4,-1,0)},
+    show:'closeup',
+  },
+];
+
+/* ======================================================================
+   STATE & UI WIRING
+   ====================================================================== */
+const state = { level:0, animate:true };
+let camAnim = null; // {fromPos,toPos,fromTar,toTar,t}
+
+const elEyebrow=document.getElementById('eyebrow');
+const elTitle=document.getElementById('title');
+const elBody=document.getElementById('body');
+const elLegend=document.getElementById('legend');
+const elProgress=document.getElementById('progress');
+const railEl=document.getElementById('rail');
+
+// build rail + progress
+const railIcons=['🧫','🫧','🔋','⚛️','⚙️'];
+LEVELS.forEach((lv,i)=>{
+  const b=document.createElement('button');
+  b.className='leveldot';
+  b.innerHTML=`<b>${i+1}</b><small>${lv.name}</small>`;
+  b.onclick=()=>goTo(i);
+  railEl.appendChild(b);
+  const p=document.createElement('i');
+  elProgress.appendChild(p);
+});
+
+function applyLevel(i, animateCam=true){
+  const lv=LEVELS[i];
+  elEyebrow.textContent=lv.eyebrow;
+  elTitle.textContent=''; // set via innerHTML for the <b> in title? keep plain
+  elTitle.textContent=lv.title;
+  elBody.innerHTML=lv.body;
+  elLegend.innerHTML='';
+  lv.legend.forEach(L=>{
+    const s=document.createElement('span');
+    s.innerHTML=`<i style="background:${L.c}"></i>${L.t}`;
+    elLegend.appendChild(s);
+  });
+  // rail + progress active states
+  [...railEl.children].forEach((c,k)=>c.classList.toggle('active',k===i));
+  [...elProgress.children].forEach((c,k)=>c.classList.toggle('on',k<=i));
+  document.getElementById('prev').disabled = i===0;
+  document.getElementById('next').disabled = i===LEVELS.length-1;
+
+  // group visibility crossfade target
+  state.showTarget = lv.show;
+
+  // camera move — pull back on narrow/portrait windows so the full width fits
+  const aspect = innerWidth/innerHeight;
+  const fit = Math.max(1, 1.55/aspect);
+  const tgt = lv.cam.target.clone();
+  const toPos = tgt.clone().add(lv.cam.pos.clone().sub(tgt).multiplyScalar(fit));
+  if(animateCam){
+    camAnim={
+      fromPos:camera.position.clone(),
+      toPos:toPos,
+      fromTar:controls.target.clone(),
+      toTar:tgt,
+      t:0,
+    };
+  } else {
+    camera.position.copy(toPos);
+    controls.target.copy(tgt);
+  }
+}
+function goTo(i){
+  i=Math.max(0,Math.min(LEVELS.length-1,i));
+  state.level=i;
+  applyLevel(i,true);
+}
+document.getElementById('prev').onclick=()=>goTo(state.level-1);
+document.getElementById('next').onclick=()=>goTo(state.level+1);
+addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight')goTo(state.level+1);
+  if(e.key==='ArrowLeft')goTo(state.level-1);
+});
+
+// tools
+const animBtn=document.getElementById('toggleAnim');
+animBtn.onclick=()=>{
+  state.animate=!state.animate;
+  animBtn.textContent = state.animate ? '⏸ Pause motion' : '▶ Resume motion';
+  animBtn.classList.toggle('off',!state.animate);
+};
+document.getElementById('resetView').onclick=()=>applyLevel(state.level,true);
+
+/* ======================================================================
+   GROUP VISIBILITY CROSSFADE
+   ====================================================================== */
+let organelleOpacityFactor = 1; // 1 shown, 0 hidden
+let closeupOpacityFactor = 0;
+const organelleBaseOpacity = new Map();
+organelle.traverse(o=>{ if(o.material){ organelleBaseOpacity.set(o, o.material.opacity); o.material.transparent=true; }});
+const closeupBaseOpacity = new Map();
+closeup.traverse(o=>{ if(o.material){ closeupBaseOpacity.set(o, o.material.opacity); o.material.transparent=true; }});
+
+function updateGroupFade(dt){
+  const wantOrg = state.showTarget==='organelle' ? 1 : 0;
+  const wantClose = state.showTarget==='closeup' ? 1 : 0;
+  organelleOpacityFactor += (wantOrg-organelleOpacityFactor)*Math.min(1,dt*4);
+  closeupOpacityFactor += (wantClose-closeupOpacityFactor)*Math.min(1,dt*4);
+
+  organelle.visible = organelleOpacityFactor>0.01;
+  closeup.visible = closeupOpacityFactor>0.01;
+  // also show level-3 innards only at level 3
+  const innardsWant = (state.level===2)?1:0.0;
+  innardsGroup.traverse(o=>{ if(o.material){ o.material.opacity = (organelleBaseOpacity.get(o)??1)*organelleOpacityFactor*innardsWant; }});
+
+  organelle.traverse(o=>{
+    if(o.material && o!==undefined && !innardsGroup.children.includes(o)){
+      const base=organelleBaseOpacity.get(o);
+      if(base!==undefined) o.material.opacity = base*organelleOpacityFactor;
+    }
+  });
+  closeup.traverse(o=>{
+    if(o.material){
+      const base=closeupBaseOpacity.get(o);
+      if(base!==undefined) o.material.opacity = base*closeupOpacityFactor;
+    }
+  });
+}
+
+/* ======================================================================
+   ANIMATION LOOP
+   ====================================================================== */
+const clock=new THREE.Clock();
+let tGlobal=0;
+
+// helper: position a proton along its lifecycle
+function placeProton(p, time){
+  // phase 0: rise from matrix (botY-1) to top at pump column
+  // phase 1: drift across the top toward the synthase
+  // phase 2: descend through synthase, recycle
+  p.t += p.speed*0.016*60* (state.animate?1:0);
+  let t=p.t % 3;
+  const m=p.mesh;
+  if(t<1){
+    const k=easeInOut(t);
+    m.position.set(p.pumpAt + Math.sin(time*3+p.pumpAt)*0.15, lerp(botY-0.8, topY+0.6, k), Math.sin(p.pumpAt*2)*0.4);
+  } else if(t<2){
+    const k=easeInOut(t-1);
+    m.position.set(lerp(p.pumpAt, 7.4, k), topY+0.6+Math.sin(time*2+p.pumpAt)*0.18, Math.sin((p.pumpAt+time)*1.5)*0.5);
+  } else {
+    const k=easeInOut(t-2);
+    m.position.set(7.4+Math.sin(time*4)*0.06, lerp(topY+0.6, botY-0.8, k), Math.sin(time*3)*0.2);
+  }
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(0.05,clock.getDelta());
+  tGlobal += dt*(state.animate?1:0);
+  const time=tGlobal;
+
+  // camera tween
+  if(camAnim){
+    camAnim.t += dt/1.1;
+    const k=easeInOut(Math.min(1,camAnim.t));
+    camera.position.lerpVectors(camAnim.fromPos,camAnim.toPos,k);
+    controls.target.lerpVectors(camAnim.fromTar,camAnim.toTar,k);
+    if(camAnim.t>=1) camAnim=null;
+  }
+
+  updateGroupFade(dt);
+
+  // gentle idle spin on level 1; ease back to the canonical side-view elsewhere
+  if(state.level===0 && state.animate){
+    organelle.rotation.y += dt*0.15;
+  } else {
+    organelle.rotation.y *= (1 - Math.min(1, dt*2.5));
+  }
+
+  // ---- close-up animations ----
+  if(closeup.visible){
+    // protons
+    protons.forEach(p=>placeProton(p,time));
+    // electrons hop I->II->III->IV then recycle (represents fuel feeding in)
+    electrons.forEach((e,idx)=>{
+      e.t += e.speed*(state.animate?1:0);
+      const t=e.t % 1;
+      const seg=t*3;            // 0..3 across four x points
+      const i=Math.min(2,Math.floor(seg));
+      const f=seg-i;
+      const x=lerp(chainX[i],chainX[i+1],easeInOut(f));
+      e.mesh.position.set(x, BILAYER_Y+Math.sin(f*Math.PI)*0.3, 0.9 + Math.sin(time*2+idx)*0.1);
+    });
+    // mobile carriers shuttle between complexes
+    const qt=(Math.sin(time*1.2)*0.5+0.5);
+    qCarrier.position.set(lerp(-6.0,-2.9,qt), BILAYER_Y-0.1, -1.4);
+    const ct=(Math.sin(time*1.0+1)*0.5+0.5);
+    cytC.position.set(lerp(-1.2,2.6,ct), topY+0.2, -1.2);
+    // ATP synthase rotor spins, faster when animating
+    rotor.rotation.y += dt*2.2;
+    // ATP products bubble up out of the F1 head
+    atps.forEach((a,i)=>{
+      a.t += dt*0.4*(state.animate?1:0);
+      const t=(a.t + i/atps.length)%1;
+      a.mesh.position.set(7.4 + Math.cos(i*2+time)*0.5, lerp(botY-1.4, botY-3.4, t), Math.sin(i*2+time)*0.5);
+      a.mesh.material.opacity = closeupBaseOpacity.get(a.mesh)*closeupOpacityFactor*(1-t);
+      a.mesh.rotation.x+=dt*2; a.mesh.rotation.y+=dt*1.5;
+    });
+  }
+
+  controls.update();
+  updateLabels();
+  renderer.render(scene,camera);
+}
+
+/* ======================================================================
+   RESIZE + BOOT
+   ====================================================================== */
+let resizeTimer=null;
+addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+  clearTimeout(resizeTimer);
+  resizeTimer=setTimeout(()=>applyLevel(state.level,true),200); // re-fit framing
+});
+
+applyLevel(0,false);
+animate();
+
+// hide loader once first frame is up
+requestAnimationFrame(()=>{
+  setTimeout(()=>{
+    const l=document.getElementById('load');
+    l.style.opacity='0';
+    setTimeout(()=>l.remove(),650);
+  },300);
+});
+</script>
+</body>
+</html>
