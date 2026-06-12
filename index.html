@@ -8,6 +8,17 @@
   window.__errs=[];
   window.addEventListener('error', e=>{ window.__errs.push(String(e.message)+' @ '+(e.filename||'')+':'+(e.lineno||'')); });
   window.addEventListener('unhandledrejection', e=>{ window.__errs.push('promise: '+String(e.reason)); });
+  // Watchdog: if the 3D view hasn't started after 7s, the module failed to load
+  // (old browser, blocked script, etc). Show diagnostics instead of spinning forever.
+  setTimeout(function(){
+    var l=document.getElementById('load');
+    if(!l) return;                       // booted fine, loader already removed
+    var info='Browser: '+navigator.userAgent+'\n'+(window.__errs.length?('Errors:\n'+window.__errs.join('\n')):'No error captured (likely unsupported browser feature).');
+    l.innerHTML='<div style="max-width:560px;padding:24px;text-align:center;font:14px/1.6 -apple-system,system-ui,sans-serif;color:#922">'
+      +'<b style="font-size:16px">The 3D view did not start.</b><br><br>This usually means the browser is older than the app needs. Please copy the text below so it can be diagnosed:<br><br>'
+      +'<code style="display:block;font-size:11px;color:#444;background:#fff;border:1px solid #eee;border-radius:8px;padding:12px;text-align:left;white-space:pre-wrap;overflow:auto;max-height:260px">'
+      + info.replace(/[<>&]/g,function(c){return {"<":"&lt;",">":"&gt;","&":"&amp;"}[c];}) +'</code></div>';
+  }, 7000);
 </script>
 <style>
   :root{
@@ -170,18 +181,11 @@
 
 <div id="load"><div class="spin"></div></div>
 
-<script type="importmap">
-{
-  "imports":{
-    "three":"./vendor/three.module.js",
-    "three/addons/":"./vendor/jsm/"
-  }
-}
-</script>
-
 <script type="module">
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+// Direct relative imports — no import map, so this works in any browser with
+// ES module support (much broader than import-map support).
+import * as THREE from './vendor/three.module.js';
+import { OrbitControls } from './vendor/jsm/controls/OrbitControls.js';
 
 /* ======================================================================
    SCENE SETUP
